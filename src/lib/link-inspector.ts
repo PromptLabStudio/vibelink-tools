@@ -29,6 +29,7 @@ type InspectOptions = {
   fetcher?: Fetcher;
   guard?: Guard;
   maxHops?: number;
+  deadlineMs?: number;
 };
 
 async function pinnedFetch(input: string, init: RequestInit = {}): Promise<Response> {
@@ -73,7 +74,7 @@ async function pinnedFetch(input: string, init: RequestInit = {}): Promise<Respo
       },
     );
     request.once("error", reject);
-    request.once("timeout", () => request.destroy(new Error("Request timeout")));
+    request.once("timeout", () => request.destroy(new DOMException("Request timeout", "TimeoutError")));
     if (init.signal) {
       if (init.signal.aborted) request.destroy(new DOMException("Aborted", "AbortError"));
       else init.signal.addEventListener(
@@ -112,6 +113,28 @@ async function readLimited(response: Response, limit = 524_288): Promise<string>
   return new TextDecoder().decode(merged);
 }
 
+async function withinDeadline<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw signal.reason;
+  let abort: (() => void) | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    abort = () => reject(signal.reason ?? new DOMException("Deadline exceeded", "TimeoutError"));
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try {
+    return await Promise.race([operation(), timeout]);
+  } finally {
+    if (abort) signal.removeEventListener("abort", abort);
+  }
+}
+
+async function cancelBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Best effort: transport cleanup must not replace the inspection result.
+  }
+}
+
 export async function inspectLink(
   input: string,
   options: InspectOptions = {},
@@ -119,6 +142,7 @@ export async function inspectLink(
   const fetcher = options.fetcher ?? pinnedFetch;
   const guard = options.guard ?? assertSafeUrl;
   const maxHops = options.maxHops ?? 8;
+  const deadline = AbortSignal.timeout(options.deadlineMs ?? 25_000);
   const original = parseHttpUrl(input);
   const seen = new Set<string>();
   const hops: RedirectHop[] = [];
@@ -128,19 +152,19 @@ export async function inspectLink(
   for (let index = 0; index <= maxHops; index += 1) {
     if (seen.has(current.toString())) throw new Error("Rantai redirect berulang terdeteksi.");
     seen.add(current.toString());
-    await guard(current);
+    await withinDeadline(() => guard(current), deadline);
 
     const started = Date.now();
-    const response = await fetcher(current.toString(), {
+    const response = await withinDeadline(() => fetcher(current.toString(), {
       method: "GET",
       redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([deadline, AbortSignal.timeout(10_000)]),
       headers: {
         accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
         range: "bytes=0-524287",
         "user-agent": "VibeLink/1.0 (+https://vibelink.vercel.app)",
       },
-    });
+    }), deadline);
 
     hops.push({
       url: current.toString(),
@@ -150,6 +174,7 @@ export async function inspectLink(
     });
 
     if (response.status >= 300 && response.status < 400) {
+      await cancelBody(response);
       const location = response.headers.get("location");
       if (!location) throw new Error("Redirect tidak memiliki tujuan.");
       if (index === maxHops) throw new Error("Redirect terlalu banyak.");
@@ -160,6 +185,8 @@ export async function inspectLink(
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("text/html")) {
       metadata = extractMetadata(await readLimited(response), current);
+    } else {
+      await cancelBody(response);
     }
     break;
   }

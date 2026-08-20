@@ -26,4 +26,13 @@ describe("extractMetadata", () => {
       description: "Ringkas",
     });
   });
+
+  it("membatasi title dan description yang terlalu panjang", () => {
+    const result = extractMetadata(
+      `<title>${"T".repeat(500)}</title><meta name="description" content="${"D".repeat(2000)}">`,
+      new URL("https://example.com"),
+    );
+    expect(result.title).toHaveLength(300);
+    expect(result.description).toHaveLength(1000);
+  });
 });

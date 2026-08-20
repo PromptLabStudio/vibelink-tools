@@ -38,6 +38,10 @@ function safeAbsoluteUrl(value: string | undefined, base: URL): string | undefin
   }
 }
 
+function limitText(value: string | undefined, limit: number): string | undefined {
+  return value?.slice(0, limit);
+}
+
 export function extractMetadata(html: string, base: URL): LinkMetadata {
   const meta = [...html.matchAll(/<meta\b[^>]*>/gi)].map((match) => match[0]);
   const links = [...html.matchAll(/<link\b[^>]*>/gi)].map((match) => match[0]);
@@ -56,8 +60,14 @@ export function extractMetadata(html: string, base: URL): LinkMetadata {
   );
 
   return {
-    title: metaValue("og:title") ?? (titleMatch ? decodeHtml(titleMatch[1]) : undefined),
-    description: metaValue("og:description") ?? metaValue("description"),
+    title: limitText(
+      metaValue("og:title") ?? (titleMatch ? decodeHtml(titleMatch[1]) : undefined),
+      300,
+    ),
+    description: limitText(
+      metaValue("og:description") ?? metaValue("description"),
+      1000,
+    ),
     image: safeAbsoluteUrl(metaValue("og:image"), base),
     favicon: safeAbsoluteUrl(iconTag ? attribute(iconTag, "href") : undefined, base),
   };

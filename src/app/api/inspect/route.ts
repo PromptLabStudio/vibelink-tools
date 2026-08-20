@@ -6,6 +6,8 @@ const requests = new Map<string, number[]>();
 const LIMIT = 15;
 const WINDOW_MS = 60_000;
 const MAX_BODY_BYTES = 4096;
+const MAX_TRACKED_IPS = 2048;
+let overflowRequests: number[] = [];
 
 class PayloadTooLargeError extends Error {}
 
@@ -32,6 +34,19 @@ async function readJsonBody(request: Request): Promise<unknown> {
 
 function allowed(ip: string): boolean {
   const now = Date.now();
+  if (!requests.has(ip) && requests.size >= MAX_TRACKED_IPS) {
+    for (const [key, times] of requests) {
+      const active = times.filter((time) => now - time < WINDOW_MS);
+      if (active.length) requests.set(key, active);
+      else requests.delete(key);
+    }
+    if (requests.size >= MAX_TRACKED_IPS) {
+      overflowRequests = overflowRequests.filter((time) => now - time < WINDOW_MS);
+      if (overflowRequests.length >= LIMIT) return false;
+      overflowRequests.push(now);
+      return true;
+    }
+  }
   const recent = (requests.get(ip) ?? []).filter((time) => now - time < WINDOW_MS);
   if (recent.length >= LIMIT) return false;
   recent.push(now);
@@ -67,10 +82,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Payload terlalu besar." }, { status: 413 });
   }
 
-  const ip =
-    request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    "unknown";
+  const ip = process.env.VERCEL
+    ? request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+    : request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!allowed(ip)) {
     return Response.json(
       { error: "Terlalu banyak permintaan. Tunggu satu menit lalu coba lagi." },

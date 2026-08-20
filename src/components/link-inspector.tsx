@@ -33,6 +33,29 @@ export type InspectionResult = {
 
 const STORAGE_KEY = "vibelink-recent-v1";
 
+function isStoredResult(value: unknown): value is InspectionResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Partial<InspectionResult>;
+  if (
+    typeof item.finalUrl !== "string" ||
+    typeof item.originalUrl !== "string" ||
+    typeof item.cleanUrl !== "string" ||
+    typeof item.inspectedAt !== "string" ||
+    !item.metadata || typeof item.metadata !== "object" || Array.isArray(item.metadata) ||
+    !Array.isArray(item.hops)
+  ) return false;
+  const metadata = item.metadata as InspectionResult["metadata"];
+  if (![metadata.title, metadata.description, metadata.image, metadata.favicon]
+    .every((field) => field === undefined || typeof field === "string")) return false;
+  return item.hops.every((hop) => Boolean(
+    hop && typeof hop === "object" &&
+    typeof hop.url === "string" &&
+    typeof hop.hostname === "string" &&
+    typeof hop.status === "number" &&
+    typeof hop.durationMs === "number",
+  ));
+}
+
 function compactUrl(value: string) {
   try {
     const url = new URL(value);
@@ -165,7 +188,11 @@ export function LinkInspector() {
   useEffect(() => {
     let stored: InspectionResult[] = [];
     try {
-      stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      stored = Array.isArray(parsed)
+        ? parsed.filter(isStoredResult).slice(0, 8)
+        : [];
+      if (!Array.isArray(parsed)) localStorage.removeItem(STORAGE_KEY);
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -212,7 +239,7 @@ export function LinkInspector() {
             <Link2 className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-stone-400" />
             <Input
               id="target-url"
-              type="url"
+              type="text"
               inputMode="url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
