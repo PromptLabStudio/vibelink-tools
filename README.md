@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VibeLink
 
-## Getting Started
+**Lihat tujuan link sebelum kamu klik.**
 
-First, run the development server:
+VibeLink adalah utilitas transparansi URL berbahasa Indonesia. Ia mengikuti redirect HTTP publik, membersihkan parameter tracking umum, menampilkan tujuan akhir, metadata halaman, serta setiap hop redirect.
+
+## Fitur MVP
+
+- Redirect chain maksimal 8 hop
+- Pembersihan `utm_*`, `fbclid`, `gclid`, `igshid`, dan tracker umum
+- Preview title dan description Open Graph
+- Copy URL akhir dan URL bersih
+- Riwayat lokal di browser tanpa akun/database
+- SSRF protection: protokol/port dibatasi, private IP ditolak, DNS diperiksa pada setiap hop, dan koneksi dipatok ke IP publik hasil resolusi
+- Timeout, response-size cap, rate limit ringan, security headers
+- Metadata SEO, Open Graph 1200×630, sitemap, robots, dan manifest
+
+## Batas Penggunaan
+
+VibeLink tidak melewati CAPTCHA, login, paywall, timer iklan, Cloudflare challenge, signed URL, atau kontrol akses lain. Proyek ini tidak menyediakan direct-stream extraction maupun bypass konten berhak cipta.
+
+## Menjalankan Lokal
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Quality Gates
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm test
+npm run build
+npx playwright test
+```
 
-## Learn More
+- Unit test: URL cleaner, network safety, metadata parser, redirect inspector
+- E2E: desktop dan mobile, URL publik dan private-IP rejection
 
-To learn more about Next.js, take a look at the following resources:
+## Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui Base UI, Motion, Vitest, Playwright, dan Vercel.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Privasi
 
-## Deploy on Vercel
+Riwayat disimpan di `localStorage` perangkat. URL tetap dikirim ke fungsi server VibeLink untuk diperiksa dan ke server tujuan untuk mengikuti redirect/mengambil metadata. Jangan masukkan link privat atau bertoken.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Lisensi
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
